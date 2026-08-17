@@ -11,6 +11,11 @@ import tempfile
 import os
 import json
 from dotenv import load_dotenv
+from prompts import CHAT_PROMPT, REVIEW_PROMPT
+import yaml
+
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
 
 load_dotenv()
 
@@ -22,7 +27,6 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { font-size: 14px; }
     .metric-bar { height: 6px; border-radius: 3px; margin-top: 4px; margin-bottom: 12px; }
     h1 { font-weight: 400; letter-spacing: -1px; }
-    .stAlert { border-radius: 6px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -31,7 +35,7 @@ st.caption("PDF tools powered by Groq + LangChain")
 
 tab1, tab2 = st.tabs(["Chat", "Review"])
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── helpers ───────────────────────────────────────────────────────────────────
 
 @st.cache_resource
 def load_embeddings():
@@ -70,21 +74,15 @@ with tab1:
         with st.spinner("Processing..."):
             loader = PyPDFLoader(tmp)
             docs = loader.load()
-            splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=config["chat"]["chunk_size"],
+                chunk_overlap=config["chat"]["chunk_overlap"]
+            )
             chunks = splitter.split_documents(docs)
             vectorstore = FAISS.from_documents(chunks, embeddings)
             retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
             llm = get_llm()
-
-            prompt = ChatPromptTemplate.from_template("""
-Answer the question based only on the following context:
-
-{context}
-
-Question: {question}
-
-Answer:""")
-
+            prompt = ChatPromptTemplate.from_template(CHAT_PROMPT)
             chain = (
                 {"context": retriever, "question": RunnablePassthrough()}
                 | prompt
@@ -116,35 +114,6 @@ Answer:""")
             st.session_state.chat_messages.append({"role": "assistant", "content": answer})
 
 # ── TAB 2: REVIEW ─────────────────────────────────────────────────────────────
-
-REVIEW_PROMPT = """You are an expert in scientific writing and academic document analysis.
-Analyze the following document and evaluate it across two dimensions:
-
-CONTENT (0-10):
-- Coherence: ideas are well connected
-- Relevance: important points receive appropriate weight
-- Conciseness: no unnecessarily over-developed sections
-- Repetition: identifies unnecessarily repeated ideas
-
-FORMAT (0-10):
-- Citations and references: correctly formatted and consistent
-- Punctuation and formal register
-- Figure references: coherent with the text
-- Paragraph order and flow
-- Logical conclusion
-- Structure: the document has a clear and logical organization
-
-Return the result in this exact JSON format, no additional text, no markdown:
-{{
-    "score_content": X,
-    "score_format": X,
-    "score_global": X,
-    "strengths": ["...", "...", "..."],
-    "improvements": ["...", "...", "..."]
-}}
-
-DOCUMENT:
-{doc_text}"""
 
 with tab2:
     st.markdown("#### Document Review")

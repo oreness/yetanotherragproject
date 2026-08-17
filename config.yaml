@@ -1,0 +1,11 @@
+llm:
+  model: "llama-3.3-70b-versatile"
+
+chat:
+  chunk_size: 1000
+  chunk_overlap: 200
+  k: 4
+  max_chars: 8000
+
+review:
+  max_chars: 8000
